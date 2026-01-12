@@ -1,0 +1,5 @@
+*~
+build_v
+exe_*
+verilog
+vendor/*.lock.hjson

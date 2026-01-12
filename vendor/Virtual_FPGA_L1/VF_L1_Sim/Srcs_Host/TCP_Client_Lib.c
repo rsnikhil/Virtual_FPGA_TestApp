@@ -1,0 +1,153 @@
+// Copyright (c) 2025-2026 Rishiyur S. Nikhil, Inc.  All Rights Reserved
+
+// ================================================================
+// Client communications over TCP/IP
+
+// ----------------
+// Acknowledgement: portions of TCP code adapted from example ECHOSERV
+//   ECHOSERV
+//   (c) Paul Griffiths, 1999
+//   http://www.paulgriffiths.net/program/c/echoserv.php
+
+// ================================================================
+// C lib includes
+
+// General
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <errno.h>
+
+// For comms polling
+#include <poll.h>
+#include <sched.h>
+
+// For TCP
+#include <sys/socket.h>       /*  socket definitions        */
+#include <sys/types.h>        /*  socket types              */
+#include <arpa/inet.h>        /*  inet (3) funtions         */
+#include <fcntl.h>            /* To set non-blocking mode   */
+#include <netinet/tcp.h>
+
+// ----------------
+// Project includes
+
+#include "TCP_Client_Lib.h"
+
+// ================================================================
+// The socket file descriptor
+
+static int sockfd = 0;
+
+// ================================================================
+// Open a TCP socket as a client connected to specified remote
+// listening server socket.
+// Return status OK or ERR.
+
+uint32_t  tcp_client_open (const char *server_host, const uint16_t server_port)
+{
+    if (server_host == NULL) {
+	fprintf (stdout, "%s: server_host is NULL\n", __FUNCTION__);
+	return TCP_COMMS_STATUS_ERR;
+    }
+    if (server_port == 0) {
+	fprintf (stdout, "%s: server_port is 0\n", __FUNCTION__);
+	return TCP_COMMS_STATUS_ERR;
+    }
+
+    fprintf (stdout, "%s: connecting to '%s' port %0d\n",
+	     __FUNCTION__, server_host, server_port);
+
+    // Create the socket
+    if ( (sockfd = socket (AF_INET, SOCK_STREAM, 0)) < 0 ) {
+	fprintf (stdout, "%s: Error creating socket.\n", __FUNCTION__);
+	return TCP_COMMS_STATUS_ERR;
+    }
+
+    struct sockaddr_in servaddr;  // socket address structure
+
+    // Initialize socket address structure
+    memset (& servaddr, 0, sizeof (servaddr));
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_port   = htons (server_port);
+
+    // Set the remote IP address
+    if (inet_aton (server_host, & servaddr.sin_addr) <= 0 ) {
+	fprintf (stdout, "%s: Invalid remote IP address.\n", __FUNCTION__);
+	return TCP_COMMS_STATUS_ERR;
+    }
+
+    // connect() to the remote server
+    if (connect (sockfd, (struct sockaddr *) &servaddr, sizeof(servaddr) ) < 0 ) {
+	fprintf (stdout, "%s: Error calling connect()\n", __FUNCTION__);
+	return TCP_COMMS_STATUS_ERR;
+    }
+
+    // This code copied from riscv-openocd's jtag_vpi.c, where they say:
+    //    "This increases performance dramatically for local
+    //     connections, which is the most likely arrangement ..."
+    if (servaddr.sin_addr.s_addr == htonl(INADDR_LOOPBACK)) {
+	int flag = 1;
+	setsockopt (sockfd, IPPROTO_TCP, TCP_NODELAY, (char *) & flag, sizeof(int));
+    }
+
+    fprintf (stdout, "%s: connected\n", __FUNCTION__);
+    return TCP_COMMS_STATUS_OK;
+}
+
+// ================================================================
+// Close the connection to the remote server.
+
+uint32_t  tcp_client_close ()
+{
+    if (sockfd > 0) {
+	fprintf (stdout, "%s\n", __FUNCTION__);
+	shutdown (sockfd, SHUT_RDWR);
+	close (sockfd);
+	sleep (1);
+    }
+
+    return  TCP_COMMS_STATUS_OK;
+}
+
+// ================================================================
+// Send a message
+
+uint32_t  tcp_client_send (const uint32_t data_size, const uint8_t *data)
+{
+    int n;
+
+    n = write (sockfd, data, data_size);
+
+    if (n < 0) {
+	fprintf (stdout, "ERROR: %s() = %0d\n", __FUNCTION__, n);
+	return TCP_COMMS_STATUS_ERR;
+    }
+    return TCP_COMMS_STATUS_OK;
+}
+
+// ================================================================
+// Recv a message
+// Return status OK or ERR
+
+uint32_t  tcp_client_recv (const uint32_t data_size, uint8_t *data)
+{
+    // Read data
+    int  n_recd = 0;
+    while (n_recd < data_size) {
+	int n = read (sockfd, & (data [n_recd]), (data_size - n_recd));
+	if ((n < 0) && (errno != EAGAIN) && (errno != EWOULDBLOCK)) {
+	    fprintf (stdout, "ERROR: %s: read () failed on byte 0\n", __FUNCTION__);
+	    exit (1);
+	}
+	else if (n > 0) {
+	    n_recd += n;
+	}
+    }
+    return TCP_COMMS_STATUS_OK;
+}
+
+// ================================================================
