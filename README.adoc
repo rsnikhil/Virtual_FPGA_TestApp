@@ -1,0 +1,32 @@
+= README for Virtual_FPGA_TestApp
+Rishiyur S. Nikhil, (c) 2026
+:revnumber: v1.0
+:revdate: 2026-01-11
+:sectnums:
+:toc:
+:toclevels: 5
+:toc: left
+:toc-title: Contents
+:description: TestApp using Virtual FPGA interface
+:keywords: FPGA, Custom Logic
+:imagesdir: Figs
+:data-uri:
+
+This is an example Application that uses the Virtual FPGA interface,
+described in https://github.com/dowsonrobotics/Virtual_FPGA_L1
+
+It has a Host-side and an FPGA-side.
+
+The Host-side is written in C. A version that interacts with the
+HW-side running in simulation (Bluesim of Verilator sim) can be built
+with `Board_Generic/Build_Host_Sim/Makefile`. This compiles and links
+and produces a standard executable in that directory.
+
+The FPGA-side is written in BSV and C.  A version that run in
+simulation (Bluesim or Verilator sim) can be built with
+`Board_Generic/Build_HW_Sim/Makefile`.  This compiles and links and
+produces a standard executable in that directory.
+
+NOTE: before building, one must peform `make all` in the `vendor`
+directory. This brings in various resources from other repos.  The
+`README.txt` file in that directory explains in more detail.
