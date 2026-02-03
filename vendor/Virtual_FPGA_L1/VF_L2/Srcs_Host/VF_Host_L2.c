@@ -2,8 +2,8 @@
 
 // ****************************************************************
 // Implements Virtual FPGA Host-side, layer 2 (multi-queue).
-// This is hand-written, but should ultimately be tool-generated,
-// given just the queue specs below.
+// Note, below, it #include's a generated file containing app-specific
+// data structures and functions.
 
 // ================================================================
 // Includes from C lib 
@@ -24,45 +24,9 @@
 #include "VF_Host_L2.h"
 
 // ****************************************************************
-// Queue specs for host-side
-
-// IMPORTANT: the Host-side and HW-side queue params must be identical:
-// * number of queues in each direction
-// * their respective item widths
-
-typedef struct {
-    uint16_t  width_B;       // bytes per item
-    uint16_t  capacity_I;    // # items
-} Queue_Params;
-
-const uint16_t all1s_16b = 0xFFFF;
-
-// ----------------
-// Host to FPGA queues
-
-static Queue_Params h2f_queue_params [] = {
-    {         8,         8 },
-    { all1s_16b, all1s_16b }
-};
-
-// ----------------
-// FPGA to Host queues
-
-static Queue_Params f2h_queue_params [] = {
-    {         4,        16 },
-    { all1s_16b, all1s_16b }
-};
-
-// ****************************************************************
 // Utilities
 
 static int l2_verbosity = 1;
-
-static
-bool is_sentinel (const Queue_Params *p)
-{
-    return ((p->width_B == all1s_16b) && (p->capacity_I == all1s_16b));
-}
 
 static
 uint16_t mk2B (uint8_t xh, uint8_t xl)
@@ -72,13 +36,14 @@ uint16_t mk2B (uint8_t xh, uint8_t xl)
 }
 
 // ****************************************************************
-// Queues for sending and receiving
+// Queue data structure (for sending and receiving)
 //   _B suffixes: # of bytes
 //   _I suffixes: # of items
 
 typedef struct {
     uint16_t    width_B;
-    uint16_t    capacity_I;
+    uint16_t    capacity_tx_I;
+    uint16_t    capacity_rx_I;
     uint16_t    size_I;       // current occupancy
     uint16_t    credits_I;    // for receive, this is last-credits-sent
     uint16_t    hd_I;         // offset, in items, into qdata_pB
@@ -95,68 +60,15 @@ void print_queue_state (FILE *fp,
     fprintf (fp, "%sQueue[%0d]", pre, qid);
     if (q->size_I == 0)
 	fprintf (stdout, " empty");
-    else if (q->size_I == q->capacity_I)
+    else if (q->size_I == q->capacity_rx_I)
 	fprintf (stdout, " full");
     else
 	fprintf (fp, " size %0d hd %0d", q->size_I, q->hd_I);
     fprintf (fp, " credits %0d%s", q->credits_I, post);
 }
 
-static
-void init_queue (const char     *direction,
-		 const uint32_t  width_B,
-		 const uint16_t  capacity_I,
-		 Queue          *pq)
-{
-    // Initialize Queue struct
-    pq->width_B    = width_B;
-    pq->capacity_I = capacity_I;
-    pq->size_I     = 0;    // empty
-    pq->credits_I  = ((strcmp (direction, "f2h") == 0) ? capacity_I : 0);
-    pq->hd_I       = 0;
-
-    // Allocate storage for Queue data
-    int n = width_B * capacity_I;
-    void *pdata = malloc (n);
-    if (pdata == NULL) {
-	fprintf (stdout,
-		 "ERROR: %s: malloc failed for %0d bytes (queue data)\n",
-		 __FUNCTION__, n);
-	exit (1);
-    }
-    pq->qdata_pB = pdata;
-}
-
-/* DELETE
-static
-void show_Queue (const char *pre,
-		 const uint8_t qid,
-		 const Queue  *q,
-		 const char *post)
-{
-    fprintf (stdout, "%s", pre);
-    fprintf (stdout,
-	     "Queue %0d [Hd %0d  Cred %0d] [Wid %0d  Cap %0d  Siz %0d]",
-	     qid, q->hd_I, q->credits_I, q->width_B,
-	     q->capacity_I, q->size_I);
-    fprintf (stdout, "%s", post);
-}
-*/
-
-// ****************************************************************
-// queues
-
-static
-int h2f_n_queues = 0;
-
-static
-Queue *h2f_queues;
-
-static
-int f2h_n_queues = 0;
-
-static
-Queue *f2h_queues;
+// ----------------
+// Queue IDs
 
 typedef uint8_t Qid;
 
@@ -165,53 +77,37 @@ static const Qid QID_NOOP = 0xFF;
 static const Qid QID_CRED = 0xFE;
 
 static
-void init_queues_one_direction (const char         *direction,
-				const Queue_Params  queue_params[],
-				int                *n_queues,
-				Queue             **queues)
+void init_queue (const char     *direction,
+		 const uint32_t  width_B,
+		 const uint16_t  capacity_tx_I,
+		 const uint16_t  capacity_rx_I,
+		 Queue          *q)
 {
-    // Count number of queues
-    *n_queues = 0;
-    while (! (is_sentinel (& (queue_params[*n_queues]))))
-	*n_queues += *n_queues + 1;
-    if (l2_verbosity != 0)
-	fprintf (stdout, "L2.%s: %s %0d queues", __FUNCTION__,
-		 direction, *n_queues);
-	
-    // Allocate queue array
-    int n = (*n_queues) * sizeof (Queue);
-    Queue *p = (Queue *) (malloc (n));
-    if (p == NULL) {
-	fprintf (stdout,
-		 "ERROR: %s: malloc failed for %0d bytes (Queue array)\n",
-		 __FUNCTION__, n);
-	exit (1);
+    bool is_f2h = (strcmp (direction, "f2h") == 0);
+    // Initialize Queue struct
+    q->width_B       = width_B;
+    q->capacity_tx_I = capacity_tx_I;
+    q->capacity_rx_I = capacity_rx_I;
+    q->size_I        = 0;    // initially empty
+    q->credits_I     = (is_f2h ? capacity_rx_I : 0);
+    q->hd_I          = 0;
+
+    // Allocate storage for Queue data
+    int n = width_B * (is_f2h ? capacity_rx_I : capacity_tx_I);
+    void *pdata = malloc (n);
+    if (pdata == NULL) {
+        fprintf (stdout,
+                 "ERROR: %s: malloc failed for %0d bytes (queue data)\\n",
+                 __FUNCTION__, n);
+        exit (1);
     }
-    // Initialize each queue from params
-    for (int j = 0; j < *n_queues; j++) {
-	if (l2_verbosity != 0) {
-	    fprintf (stdout, "%s: %s initializing queue %0d", __FUNCTION__,
-		     direction, j);
-	    fprintf (stdout, "    width_B %0d  capacity_I %0d",
-		     queue_params[j].width_B,
-		     queue_params[j].capacity_I);
-	}
-	init_queue (direction,
-		    queue_params[j].width_B,
-		    queue_params[j].capacity_I,
-		    & (p [j]));
-    }
-    *queues = p;
+    q->qdata_pB = pdata;
 }
 
-static
-void init_all_queues ()
-{
-    init_queues_one_direction ("h2f", h2f_queue_params,
-			       & h2f_n_queues, & h2f_queues);
-    init_queues_one_direction ("f2h", f2h_queue_params,
-			       & f2h_n_queues, & f2h_queues);
-}
+// ----------------
+// App-specific queue info
+
+#include "VF_Host_L2_generated.h"
 
 // ****************************************************************
 // Start/initialize Virtual FPGA L2 layer
@@ -253,7 +149,7 @@ int vf_l2_f2h_pop (const uint8_t qid, uint8_t *buf)
     else {
 	uint8_t *p = q->qdata_pB + (q->hd_I * q->width_B);
 	memcpy (buf, p, q->width_B);
-	q->hd_I = (q->hd_I + 1) % (q->capacity_I);
+	q->hd_I = (q->hd_I + 1) % (q->capacity_rx_I);
 	q->size_I--;
 	q->credits_I = q->credits_I + 1;
 	if (l2_verbosity > 1)
@@ -284,13 +180,13 @@ int vf_l2_h2f_enqueue (const uint8_t qid, const uint8_t *buf)
     if (l2_verbosity > 1)
 	print_queue_state (stdout, "    vf_l2_h2f_enqueue\n    BEFORE h2f ",
 			   qid, q, "\n");
-    if (q->size_I == q->capacity_I) {
+    if (q->size_I == q->capacity_rx_I) {
 	return 0;    // full
 	if (l2_verbosity > 1)
 	    fprintf (stdout, "    ... full\n");
     }
 
-    uint16_t tl_I = (q->hd_I * q->size_I) % q->capacity_I;
+    uint16_t tl_I = (q->hd_I * q->size_I) % q->capacity_rx_I;
     uint8_t *p = q->qdata_pB + (tl_I * q->width_B);
     memcpy (p, buf, q->width_B);
     q->size_I++;
@@ -338,7 +234,7 @@ bool send_h2f ()
 		vf_l1_h2f_send (q->width_B, p_hd);
 	    }
 	    q->size_I = q->size_I - 1;
-	    q->hd_I   = (q->hd_I + 1) % q->capacity_I;
+	    q->hd_I   = (q->hd_I + 1) % q->capacity_tx_I;
 	    if (l2_verbosity > 1) {
 		fprintf (stdout, "       send item %0d:", j);
 		if (q->width_B != 0) {
@@ -433,7 +329,7 @@ bool recv_f2h ()
 
 	// Iterate over items to accommodate buffer wraparound
 	for (int j = 0; j < n_I; j++) {
-	    uint16_t tl_ix_I = (q->hd_I + q->size_I) % q->capacity_I;
+	    uint16_t tl_ix_I = (q->hd_I + q->size_I) % q->capacity_rx_I;
 	    vf_l1_f2h_recv (q->width_B, & (q->qdata_pB [tl_ix_I * q->width_B]));
 	    if (l2_verbosity > 1) {
 		fprintf (stdout, "    item data:");
@@ -477,8 +373,5 @@ void vf_l2_finish ()
 {
     vf_l1_finish ();
 }
-
-static uint8_t request [17];
-static uint8_t buf [64];
 
 // ****************************************************************

@@ -23,7 +23,8 @@ import Semi_FIFOF   :: *;
 // ----------------
 // Imports from this project
 
-import VF_HW_L2 :: *;
+import VF_HW_L2_IFC :: *;
+import VF_HW_L2     :: *;
 
 // ****************************************************************
 // AXI4 Params for this DUT
@@ -45,28 +46,8 @@ endinterface
 // ****************************************************************
 // DUT Module
 
-module mkApp_HW
-   #(Clock clk1, Clock clk2, Clock clk3, Clock clk4, Clock clk5,
-     FIFOF_O #(Bit #(H2F_q0_width_b)) fo_h2f,
-     FIFOF_I #(Bit #(F2H_q0_width_b)) fi_f2h
-
-     // DDR
-     // AXI4_RTL_S_IFC #(DDR_AXI4_wd_id,
-     //		         DDR_AXI4_wd_addr,
-     //                  DDR_AXI4_wd_data,
-     //                  DDR_AXI4_wd_user) ddr_AXI4_RTL_S
-     )
-   (App_HW_IFC);
-
-   /*
-   // DDR AXI4 Transactors
-   AXI4_BSV_to_RTL_IFC #(DDR_AXI4_wd_id,
-			 DDR_AXI4_wd_addr,
-			 DDR_AXI4_wd_data,
-			 DDR_AXI4_wd_user) ddr_xactor <- mkAXI4_BSV_to_RTL;
-
-   mkConnection (ddr_xactor.rtl_M, ddr_AXI4_RTL_S);
-   */
+module mkApp_HW #(VF_HW_L2_IFC l2)
+                (App_HW_IFC);
 
    // ================================================================
    // BEHAVIOR
@@ -76,7 +57,7 @@ module mkApp_HW
    Reg #(Bit #(H2F_q0_width_b)) rg_data  <- mkRegU;
 
    rule rl_echo_0 (rg_state == 0);
-      let x <- pop_o (fo_h2f);
+      let x <- pop_o (l2.fo_h2f_q0);
       $display ("App: rl_echo_0: recv %0h", x);
       rg_data  <= x;
       rg_state <= 1;
@@ -84,14 +65,14 @@ module mkApp_HW
 
    rule rl_echo_1 (rg_state == 1);
       let x = rg_data [31:0];
-      fi_f2h.enq (x);
+      l2.fi_f2h_q0.enq (x);
       $display ("App: rl_echo_1: send %0h", x);
       rg_state <= 2;
    endrule
 
    rule rl_echo_2 (rg_state == 2);
       let x = rg_data [63:32];
-      fi_f2h.enq (x);
+      l2.fi_f2h_q0.enq (x);
       $display ("App: rl_echo_2: send %0h", x);
       rg_state <= 0;
    endrule

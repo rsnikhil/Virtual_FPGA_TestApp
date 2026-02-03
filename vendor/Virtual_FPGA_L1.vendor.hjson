@@ -19,6 +19,9 @@
   mapping: [
     {from: 'Makefile',     to: 'Makefile'},
 
+    {from: 'Generators'
+       to: 'Generators'},
+
     {from: 'VF_L2'
        to: 'VF_L2'},
 

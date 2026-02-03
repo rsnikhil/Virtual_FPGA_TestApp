@@ -26,7 +26,8 @@ import Semi_FIFOF   :: *;
 // ----------------
 // Imports from this project
 
-import VF_HW_L2 :: *;    // Layer 2 of infra (includes Layer 1)
+import VF_HW_L2_IFC :: *;    // Interface of infra layer 2 (includes Layer 1)
+import VF_HW_L2     :: *;    // Infra layer 2 (includes Layer 1)
 
 // The application, hardware side
 import App_HW :: *;
@@ -40,24 +41,8 @@ module mkVF_HW_Top (Empty);
    // Instantiate Layer 2 (which includes Layer 1)
    VF_HW_L2_IFC layer2 <- mkVF_HW_L2;
 
-
-   ClockDividerIfc clkdiv1 <- mkClockDivider (2);    // 125 MHz
-   ClockDividerIfc clkdiv2 <- mkClockDivider (3);    // 83.333 MHz
-   ClockDividerIfc clkdiv3 <- mkClockDivider (5);    // 50 MHz
-   ClockDividerIfc clkdiv4 <- mkClockDivider (10);   // 25 MHz
-   ClockDividerIfc clkdiv5 <- mkClockDivider (25);   // 10 MHz
-
    // The HW-side of the Application
-   App_HW_IFC app <- mkApp_HW (clkdiv1.slowClock,
-			       clkdiv2.slowClock,
-			       clkdiv3.slowClock,
-			       clkdiv4.slowClock,
-			       clkdiv5.slowClock,
-			       layer2.fo_h2f_q0,
-			       layer2.fi_f2h_q0
-			       // AXI4(s) to DDR(s)
-			       // AXI4(s) to other resource(s)
-			       );
+   App_HW_IFC app <- mkApp_HW (layer2);
 
    // ================================================================
    // BEHAVIOR
@@ -79,6 +64,7 @@ module mkVF_HW_Top (Empty);
    endrule
 
    rule rl_step2 (rg_step == 2);
+      $display ("VF_HW_Top: app.start()");
       Bool ok <- app.start ();
       if (! ok) begin
 	 $display ("ERROR: VF_HW_Top: app.start() failed");

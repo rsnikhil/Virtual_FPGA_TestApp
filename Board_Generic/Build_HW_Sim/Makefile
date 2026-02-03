@@ -1,15 +1,18 @@
 .PHONY: help
 help:
+	@echo "See documentation for HW-side build flow for context."
+	@echo "Requires certain files to be generated, prior to this."
+	@echo ""
 	@echo "This Makefile is to build TestApp's HW-side executable, simulation version."
 	@echo "The module hierarchy, in outline, is:"
-	@echo "    mkVirtual_HW_L1_Sim     [1]"
-	@echo "        mkVirtual_HW_APP_HW    [2]"
-	@echo "[1] file vendor/Virtual_HW_L1/Sim_Lib/Srcs_HW/Srcs_BSV/VF_Sim.bsv"
-	@echo "[2] file Srcs_HW/Srcs_BSV/Virtual_HW_APP_HW.bsv"
+	@echo "    mkVF_HW_Top       [1]"
+	@echo "        mkApp_HW"
+	@echo "        mkVF_HW_L2    [2]"
+	@echo "[1] and [2] are in vendor/Virtual_HW_L1/"
 	@echo ""
 	@echo "Available targets:"
-	@echo "  b_compile b_link         bsc-compile and link an executable for Bluesim"
-	@echo "  v_compile v_link         bsc-compile and link an executable for Verilator"
+	@echo "  b_compile b_link         compile and link for Bluesim"
+	@echo "  v_compile v_link         compile and link for Verilator"
 	@echo ""
 	@echo "  b_run  v_run             run the Bluesim or Verilator exe"
 	@echo ""
@@ -29,26 +32,27 @@ v_all: v_compile v_link
 EXECUTABLE = exe_TestApp_HW_Sim
 
 # ================================================================
-# Sources for this App
 
-APP_DIR         = ../..
-SRCS_APP_HW_DIR = $(APP_DIR)/Srcs_HW
+# Root dir of this repo
+ROOT_D = ../..
+
+SRCS_APP_HW_D = $(ROOT_D)/Srcs_HW
 
 # ================================================================
 # External libs (under 'vendor')
 
-VENDOR_DIR = ../../vendor
+VENDOR_D = ../../vendor
 
-VENDOR_VIRT_HW_DIR = $(VENDOR_DIR)/Virtual_FPGA_L1
+VENDOR_VIRT_HW_D = $(VENDOR_D)/Virtual_FPGA_L1
 
-SRCS_L1_HW_DIR = $(VENDOR_VIRT_HW_DIR)/VF_L1_Sim/Srcs_HW
-SRCS_L2_HW_DIR = $(VENDOR_VIRT_HW_DIR)/VF_L2/Srcs_HW
+SRCS_L1_HW_D = $(VENDOR_VIRT_HW_D)/VF_L1_Sim/Srcs_HW
+SRCS_L2_HW_D = $(VENDOR_VIRT_HW_D)/VF_L2/Srcs_HW
 
-TOP_FILE   ?= $(SRCS_L2_HW_DIR)/VF_HW_Top.bsv
+TOP_FILE   ?= $(SRCS_L2_HW_D)/VF_HW_Top.bsv
 TOP_MODULE ?= mkVF_HW_Top
 
-LIB_MISC_DIR += $(VENDOR_DIR)/bsc-contrib_Libraries/Misc
-LIB_AXI4_DIR += $(VENDOR_DIR)/bsc-contrib_Libraries/AMBA_Fabrics/AXI4
+LIB_MISC_D += $(VENDOR_D)/bsc-contrib_Libraries/Misc
+LIB_AXI4_D += $(VENDOR_D)/bsc-contrib_Libraries/AMBA_Fabrics/AXI4
 
 # Suppress warning G0020 (unpredictable order of $display etc. in methods)
 BSCFLAGS = \
@@ -62,7 +66,7 @@ BSCFLAGS = \
 	-show-schedule \
         -suppress-warnings G0020
 
-C_FILES  = $(SRCS_L1_HW_DIR)/C_Imported_Functions.c
+C_FILES  = $(SRCS_L1_HW_D)/C_Imported_Functions.c
 
 # Only needed for imported C code
 BSC_C_FLAGS += -Xl -v  -Xc -O3  -Xc++ -O3
@@ -70,7 +74,7 @@ BSC_C_FLAGS += -Xl -v  -Xc -O3  -Xc++ -O3
 # ----------------
 # bsc's directory search path
 
-BSCPATH = $(SRCS_L1_HW_DIR):$(SRCS_L2_HW_DIR):$(SRCS_APP_HW_DIR):$(LIB_MISC_DIR):$(LIB_AXI4_DIR):+
+BSCPATH = $(SRCS_L1_HW_D):$(SRCS_APP_HW_D):$(LIB_MISC_D):$(LIB_AXI4_D):+
 
 # ****************************************************************
 # FOR VERILATOR
@@ -88,7 +92,7 @@ verilog:
 	mkdir -p $@
 
 .PHONY: v_compile
-v_compile: build_v verilog
+v_compile: $(VF_HW_L2_BSV) build_v verilog
 	@echo "Compiling for Verilog (Verilog generation) ..."
 	bsc -u -elab -verilog  $(BSCDIRS_V)  $(BSCFLAGS)  -p $(BSCPATH_V)  $(TOP_FILE)
 	@echo "Verilog generation finished"
@@ -126,7 +130,7 @@ C_for_bsim:
 	mkdir -p $@
 
 .PHONY: b_compile
-b_compile: build_b
+b_compile: $(VF_HW_L2_BSV) build_b
 	@echo Compiling for Bluesim ...
 	bsc -u -sim $(BSCDIRS_BSIM_c)  $(BSCFLAGS)  -p $(BSCPATH_BSIM)  $(TOP_FILE)
 	@echo Compilation for Bluesim finished
@@ -157,6 +161,8 @@ clean:
 
 .PHONY: full_clean
 full_clean: clean
-	rm -r -f  exe_*  verilog  log*  $(L1_C_DIR)/*.o  build_b  obj_dir_*
+	rm -r -f  exe_*  verilog  $(L1_C_D)/*.o  BSV/*
+	rm -r -f  $(VF_HW_L1_PARAMS)  $(VF_HW_L2_BSV)
+	rm -r -f  log*  build_b  obj_dir_*
 
 # ****************************************************************

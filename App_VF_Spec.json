@@ -1,0 +1,5 @@
+[
+    { "dir":"h2f", "id":0, "width_B":8, "capacity_h_I":5,  "capacity_f_I":128 },
+
+    { "dir":"f2h", "id":0, "width_B":4, "capacity_h_I":32, "capacity_f_I":2 }
+]

@@ -110,8 +110,12 @@ void  c_host_listen (const uint16_t tcp_port)
     // Create the listening socket
     if ( (listen_sockfd = socket (AF_INET, SOCK_STREAM, 0)) < 0 ) {
 	fprintf (stdout, "ERROR: %s: socket () failed\n", __FUNCTION__);
+	fprintf (stdout, "  to create listen_sockfd");
+	fprintf (stdout, "  QUIT\n");
 	exit (1);
     }
+    if (debug_connect)
+	fprintf (stdout, "  listen_sockfd = %0d\n", listen_sockfd);
   
     // Set linger to 0 (immediate exit on close)
     linger.l_onoff  = 1;
@@ -133,12 +137,16 @@ void  c_host_listen (const uint16_t tcp_port)
 	      (struct sockaddr *) & servaddr,
 	      sizeof (servaddr)) < 0) {
 	fprintf (stdout, "ERROR: %s: bind () failed\n", __FUNCTION__);
+	fprintf (stdout, "  QUIT\n");
 	exit (1);
     }
 
     // Listen for connection
+    if (debug_connect)
+	fprintf (stdout, "Listening ...\n");
     if ( listen (listen_sockfd, 1) < 0 ) {
 	fprintf (stdout, "ERROR: %s: listen () failed\n", __FUNCTION__);
+	fprintf (stdout, "  QUIT\n");
 	exit (1);
     }
 
@@ -146,12 +154,14 @@ void  c_host_listen (const uint16_t tcp_port)
     int flags = fcntl (listen_sockfd, F_GETFL, 0);
     if (flags < 0) {
 	fprintf (stdout, "ERROR: %s: fcntl (F_GETFL) failed\n", __FUNCTION__);
+	fprintf (stdout, "  QUIT\n");
 	exit (1);
     }
     flags = (flags |O_NONBLOCK);
     if (fcntl (listen_sockfd, F_SETFL, flags) < 0) {
 	fprintf (stdout, "ERROR: %s: fcntl (F_SETFL, O_NONBLOCK) failed\n",
 		 __FUNCTION__);
+	fprintf (stdout, "  QUIT\n");
 	exit (1);
     }
 }
@@ -171,11 +181,14 @@ uint8_t c_host_try_accept ()
     }
     else if (connected_sockfd < 0) {
 	fprintf (stdout, "ERROR: %s: accept () failed\n", __FUNCTION__);
+	fprintf (stdout, "  QUIT\n");
 	exit (1);
     }
     else {
-	if (debug_connect)
+	if (debug_connect) {
 	    fprintf (stdout, "%s: Connection accepted\n", __FUNCTION__);
+	    fprintf (stdout, "  connected_sockfd = %0d\n", connected_sockfd);
+	}
 	return 1;
     }
 }
@@ -188,7 +201,7 @@ uint8_t c_host_try_accept ()
 uint8_t c_host_connect (const uint16_t tcp_port)
 {
     if (debug_connect)
-	fprintf (stdout, "  %s: from host connection on port %0d\n",
+	fprintf (stdout, "  %s: from host on TCP port %0d\n",
 		 __FUNCTION__, tcp_port);
 
     // Start listening on given tcp port
@@ -240,22 +253,16 @@ bool c_host_disconnect (uint8_t dummy)
 }
 
 // ================================================================
-// Size of buffer (num bytes) communicating data between BSV and C
-// WARNING: must agree with declaration on BSV side (C_Imports.bsv)
-
-#define SEND_BUF_SIZE_B 64
-#define RECV_BUF_SIZE_B 65
-
-// ================================================================
 // Receive from host
 
-void c_fromhost_recv (      uint8_t  buf [RECV_BUF_SIZE_B],
-		      const uint16_t n_bytes)
+void c_fromhost_recv (uint8_t *buf,
+		      const uint16_t n_bytes,
+		      const uint16_t recv_buf_size_B)
 {
     check_connection (connected_sockfd, __FUNCTION__);
     
-    // Last byte of buf is for AVAIL(1)/UNAVAIL(0) status
-    assert (n_bytes < RECV_BUF_SIZE_B);
+    // Last byte of buf reserved for AVAIL(1)/UNAVAIL(0) status
+    assert (n_bytes < recv_buf_size_B);
 
     // ----------------
     // First, poll to check if any data is available
@@ -274,7 +281,7 @@ void c_fromhost_recv (      uint8_t  buf [RECV_BUF_SIZE_B],
     }
 
     if ((x_pollfd.revents & POLLRDNORM) == 0) {
-	buf [RECV_BUF_SIZE_B - 1] = 0;    // UNAVAILABLE
+	buf [recv_buf_size_B - 1] = 0;    // UNAVAILABLE
 	return;
     }
 
@@ -295,7 +302,7 @@ void c_fromhost_recv (      uint8_t  buf [RECV_BUF_SIZE_B],
 
 	n_recd += n;
     }
-    buf [RECV_BUF_SIZE_B - 1] = 1;    // AVAILABLE
+    buf [recv_buf_size_B - 1] = 1;    // AVAILABLE
     if (debug_recv) {
 	fprintf (stdout, "    %s:", __FUNCTION__);
 	for (int j = 0; j < n_bytes; j++)
@@ -309,15 +316,18 @@ void c_fromhost_recv (      uint8_t  buf [RECV_BUF_SIZE_B],
 // TODO: repeated calls to send data, up to 512B at a time,
 //       then send status.
 
-void c_tohost_send (const uint8_t  buf [SEND_BUF_SIZE_B],
-		    const uint16_t n_bytes)
+void c_tohost_send (const uint8_t  *buf,
+		    const uint16_t  n_bytes,
+		    const uint16_t  send_buf_size_B)
+
 {
     check_connection (connected_sockfd, __FUNCTION__);
     
-    assert (n_bytes <= SEND_BUF_SIZE_B);
+    assert (n_bytes <= send_buf_size_B);
 
     if (debug_send) {
-	fprintf (stdout, "  %s:", __FUNCTION__);
+	fprintf (stdout, "    %s(buf, %0d)\n", __FUNCTION__, n_bytes);
+	fprintf (stdout, "    buf:");
 	for (int j = 0; j < n_bytes; j++)
 	    fprintf (stdout, " %02x", buf [j]);
 	fprintf (stdout, "\n");
@@ -328,9 +338,11 @@ void c_tohost_send (const uint8_t  buf [SEND_BUF_SIZE_B],
     while (n_sent < n_bytes) {
 	int n = write (connected_sockfd, & (buf [n_sent]), (n_bytes - n_sent));
 	if ((n < 0) && (errno != EAGAIN) && (errno != EWOULDBLOCK)) {
-	    fprintf (stdout,
-		     "ERROR: %s: socket-write () failed after %0d bytes\n",
-		     __FUNCTION__, n_sent);
+	    fprintf (stdout, "ERROR: %s: socket-write () fail\n", __FUNCTION__);
+	    fprintf (stdout, "  Sent %0d bytes", n_sent);
+	    fprintf (stdout, " onn connected_sockfd = %0d\n", connected_sockfd);
+	    fprintf (stdout, "  QUIT\n");
+	    perror (NULL);
 	    exit (1);
 	}
 	else if (n > 0) {

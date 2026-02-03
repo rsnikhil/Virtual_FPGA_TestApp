@@ -1,5 +1,8 @@
 .PHONY: help
 help:
+	@echo "See documentation for Host-side build flow for context."
+	@echo "Requires certain files to be generated, prior to this."
+	@echo ""
 	@echo "This Makefile is to build TestApp's host-side executable, simulation version."
 	@echo "Top-level: 'main.c'."
 	@echo "Invokes Virtual_FPGA_V1 libraries (in 'vendor/')."
@@ -21,30 +24,36 @@ all: $(EXECUTABLE)
 # ================================================================
 # Sources for this app
 
-APP_DIR = ../..
-SRCS_C += $(APP_DIR)/Srcs_Host/main.c
+# Root dir of this repo
+ROOT_D = ../..
+
+L2_SPEC_FILE ?= $(ROOT_D)/L2_QMux_A.json
+
+SRCS_C += $(ROOT_D)/Srcs_HOST/main.c
+
+VF_D = $(ROOT_D)/vendor/Virtual_FPGA_L1
+# VF_D = $(HOME)/Git/Virtual_FPGA_L1    DELETE
 
 # ================================================================
 # External libs (under 'vendor')
 
-VENDOR_DIR = ../../vendor
-VF_DIR = $(VENDOR_DIR)/Virtual_FPGA_L1
+VF_L2_D = $(VF_D)/VF_L2/Srcs_Host
+VF_L1_D = $(VF_D)/VF_L1_Sim/Srcs_Host
 
-VF_L2_DIR = $(VF_DIR)/VF_L2/Srcs_Host
-VF_L1_DIR = $(VF_DIR)/VF_L1_Sim/Srcs_Host
+SRCS_C += $(VF_L2_D)/VF_Host_L2.c
 
-SRCS_C += $(VF_L2_DIR)/VF_Host_L2.c
+SRCS_C += $(VF_L1_D)/VF_Host_L1.c
+SRCS_C += $(VF_L1_D)/TCP_Client_Lib.c
 
-SRCS_C += $(VF_L1_DIR)/VF_Host_L1.c
-SRCS_C += $(VF_L1_DIR)/TCP_Client_Lib.c
+SRCS_H += $(VF_L2_D)/VF_Host_L2.h
+SRCS_H += $(VF_L2_D)/VF_Host_L2_protos.h
 
-SRCS_H += $(VF_L2_DIR)/VF_Host_L2.h
-SRCS_H += $(VF_L2_DIR)/VF_Host_L2_protos.h
+SRCS_H += $(ROOT_D)/Srcs_HOST/VF_Host_L2_generated.h
 
-SRCS_H += $(VF_L1_DIR)/VF_Host_L1.h
-SRCS_H += $(VF_L1_DIR)/VF_Host_L1_protos.h
-SRCS_H += $(VF_L1_DIR)/TCP_Client_Lib.h
-SRCS_H += $(VF_L1_DIR)/TCP_Client_Lib_protos.h
+SRCS_H += $(VF_L1_D)/VF_Host_L1.h
+SRCS_H += $(VF_L1_D)/VF_Host_L1_protos.h
+SRCS_H += $(VF_L1_D)/TCP_Client_Lib.h
+SRCS_H += $(VF_L1_D)/TCP_Client_Lib_protos.h
 
 # ================================================================
 # Build (C-compile and link)
@@ -53,8 +62,9 @@ SRCS_H += $(VF_L1_DIR)/TCP_Client_Lib_protos.h
 
 $(EXECUTABLE): $(SRCS_H) $(SRCS_C)
 	$(CC) $(CFLAGS) -o $(EXECUTABLE) \
-	    -I $(VF_L2_DIR) \
-	    -I $(VF_L1_DIR) \
+	    -I $(ROOT_D)/Srcs_HOST/ \
+	    -I $(VF_L2_D) \
+	    -I $(VF_L1_D) \
 	    $(SRCS_C)
 
 .PHONY: run
