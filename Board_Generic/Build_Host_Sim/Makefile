@@ -8,7 +8,7 @@ help:
 	@echo "Invokes Virtual_FPGA_V1 libraries (in 'vendor/')."
 	@echo ""
 	@echo "Available targets:"
-	@echo "  all           Compile and link executable $(EXECUTABLE)"
+	@echo "  all, exe      Compile and link executable $(EXECUTABLE)"
 	@echo "  run           make all; then run it"
 	@echo ""
 	@echo "  clean         Remove temporary intermediate files"
@@ -18,8 +18,8 @@ help:
 
 EXECUTABLE = exe_VF_TestApp_Host_Sim
 
-.PHONY: all
-all: $(EXECUTABLE)
+.PHONY: all exe
+all exe: $(EXECUTABLE)
 
 # ================================================================
 # Sources for this app
@@ -31,8 +31,18 @@ L2_SPEC_FILE ?= $(ROOT_D)/L2_QMux_A.json
 
 SRCS_C += $(ROOT_D)/Srcs_HOST/main.c
 
-VF_D = $(ROOT_D)/vendor/Virtual_FPGA_L1
-# VF_D = $(HOME)/Git/Virtual_FPGA_L1    DELETE
+VF_D_TEMPORARY = $(HOME)/Git/Virtual_FPGA_L1
+VF_D_PERMANENT = $(ROOT_D)/vendor/Virtual_FPGA_L1
+
+# Uncomment only one of these two lines
+# VF_D = $(VF_D_TEMPORARY)
+VF_D = $(VF_D_PERMANENT)
+
+ifeq ($(VF_D), $(VF_D_TEMPORARY))
+    $(info ***** WARNING: VF_D = $(VF_D_TEMPORARY))
+    $(info ***** Remember to change to $(VF_D_PERMANENT))
+    $(info $(BOGUS_FOR_NEWLINE))
+endif
 
 # ================================================================
 # External libs (under 'vendor')

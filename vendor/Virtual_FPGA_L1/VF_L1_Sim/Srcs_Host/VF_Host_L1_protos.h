@@ -15,6 +15,9 @@ extern
 void vf_l1_h2f_send (const int n_bytes, const uint8_t *buf);
 
 extern
+int vf_l1_f2h_recv_nb (const int n_bytes, uint8_t *buf);
+
+extern
 void vf_l1_f2h_recv (const int n_bytes, uint8_t *buf);
 
 extern

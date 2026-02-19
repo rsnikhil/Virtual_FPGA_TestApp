@@ -116,26 +116,50 @@ uint32_t  tcp_client_close ()
 // ================================================================
 // Send a message
 
-uint32_t  tcp_client_send (const uint32_t data_size, const uint8_t *data)
+void tcp_client_send (const uint32_t data_size, const uint8_t *data)
 {
     int n;
 
-    n = write (sockfd, data, data_size);
-
-    if (n < 0) {
-	fprintf (stdout, "ERROR: %s() = %0d\n", __FUNCTION__, n);
-	return TCP_COMMS_STATUS_ERR;
+    // Loop until sent data_size bytes
+    int  n_sent = 0;
+    while (n_sent < data_size) {
+	n = write (sockfd, data, data_size);
+	if (n < 0) {
+	    fprintf (stdout, "ERROR: %s() = %0d\n", __FUNCTION__, n);
+	    exit (1);
+	}
+	else
+	    n_sent += n;
     }
-    return TCP_COMMS_STATUS_OK;
 }
 
 // ================================================================
 // Recv a message
-// Return status OK or ERR
+// Return 0: UNAVAILABLE or 1:OK (received)
 
-uint32_t  tcp_client_recv (const uint32_t data_size, uint8_t *data)
+int tcp_client_recv (const uint32_t data_size, uint8_t *data)
 {
-    // Read data
+    // ----------------
+    // First, poll to check if any data is available
+
+    struct pollfd  x_pollfd;
+    x_pollfd.fd      = sockfd;
+    x_pollfd.events  = POLLRDNORM;
+    x_pollfd.revents = 0;
+
+    int n = poll (& x_pollfd, 1, 0);
+
+    if (n < 0) {
+	fprintf (stdout, "ERROR: %s: poll () failed\n", __FUNCTION__);
+	exit (1);
+    }
+
+    if ((x_pollfd.revents & POLLRDNORM) == 0)
+	return 0;    // Unavailable
+
+    // ----------------
+    // Data available; read data_size bytes and return
+
     int  n_recd = 0;
     while (n_recd < data_size) {
 	int n = read (sockfd, & (data [n_recd]), (data_size - n_recd));
@@ -147,7 +171,7 @@ uint32_t  tcp_client_recv (const uint32_t data_size, uint8_t *data)
 	    n_recd += n;
 	}
     }
-    return TCP_COMMS_STATUS_OK;
+    return 1;
 }
 
 // ================================================================

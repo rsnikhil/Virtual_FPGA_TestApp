@@ -75,13 +75,28 @@ void vf_l1_h2f_send (const int n_bytes, const uint8_t *buf)
 }
 
 // ****************************************************************
-// Receive message from HW-side
+// Receive (non-blocking) message from HW-side
+// Return 0: UNAVAILABLE or 1:OK (received)
+
+int vf_l1_f2h_recv_nb (const int n_bytes, uint8_t *buf)
+{
+    // Note: in non-TCP transports (e.g., AXI), we may have to send a
+    // read-request before receiving this data.
+    return tcp_client_recv (n_bytes, buf);
+}
+
+// ****************************************************************
+// Receive (blocking) message from HW-side
 
 void vf_l1_f2h_recv (const int n_bytes, uint8_t *buf)
 {
     // Note: in non-TCP transports (e.g., AXI), we may have to send a
     // read-request before receiving this data.
-    tcp_client_recv (n_bytes, buf);
+    while (true) {
+	int rc = tcp_client_recv (n_bytes, buf);
+	if (rc == 1) break;
+	usleep (1);
+    }
 }
 
 // ****************************************************************

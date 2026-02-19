@@ -10,3 +10,4 @@ Srcs_HW/VF_HW_L1_Params.bsv
 Srcs_HW/VF_HW_L2.bsv
 Srcs_HW/VF_HW_L2_IFC.bsv
 Srcs_Host/VF_Host_L2_generated.h
+log*.txt

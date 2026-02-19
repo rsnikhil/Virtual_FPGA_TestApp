@@ -43,7 +43,8 @@ def main (argv = None):
     with open (outputfile_name, "w") as fpo:
         fpo.write ("// THIS FILE IS GENERATED; DO NOT EDIT.\n")
         fpo.write ("\n")
-        gen_init_all_queues (fpo, qspecs_h2f, qspecs_f2h)
+        gen_init_all_queues     (fpo, qspecs_h2f, qspecs_f2h)
+        gen_finalize_all_queues (fpo, qspecs_h2f, qspecs_f2h)
     sys.stdout.write ("... done\n")
 
     return 0
@@ -59,8 +60,8 @@ def gen_init_all_queues (fpo, qspecs_h2f, qspecs_f2h):
     fpo.write ("\n")
     fpo.write ("static const int f2h_n_queues = {:d};\n".format (f2h_n_queues))
     fpo.write ("static Queue f2h_queues [{:d}];\n".format (f2h_n_queues))
-    fpo.write ("\n")
 
+    fpo.write ("\n")
     fpo.write ('static\n')
     fpo.write ('void init_all_queues ()\n')
     fpo.write ('{\n')
@@ -82,6 +83,25 @@ def gen_init_all_queues (fpo, qspecs_h2f, qspecs_f2h):
                             qspec ["capacity_h_I"],
                             qspec ["id"]))
         fpo.write (');\n')
+
+    fpo.write ('}\n')
+
+# ****************************************************************
+
+def gen_finalize_all_queues (fpo, qspecs_h2f, qspecs_f2h):
+    h2f_n_queues = len (qspecs_h2f)
+    f2h_n_queues = len (qspecs_f2h)
+
+    fpo.write ("\n")
+    fpo.write ('static\n')
+    fpo.write ('void finalize_all_queues ()\n')
+    fpo.write ('{\n')
+
+    for qspec in qspecs_h2f:
+        fpo.write ('    finalize_queue (& (h2f_queues [{:d}]));\n'.format (qspec ["id"]))
+
+    for qspec in qspecs_f2h:
+        fpo.write ('    finalize_queue (& (f2h_queues [{:d}]));\n'.format (qspec ["id"]))
 
     fpo.write ('}\n')
 

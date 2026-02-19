@@ -15,7 +15,7 @@ extern
 uint32_t  tcp_client_close ();
 
 extern
-uint32_t  tcp_client_send (const uint32_t data_size, const uint8_t *data);
+void tcp_client_send (const uint32_t data_size, const uint8_t *data);
 
 extern
-uint32_t  tcp_client_recv (const uint32_t data_size, uint8_t *data);
+int tcp_client_recv (const uint32_t data_size, uint8_t *data);
